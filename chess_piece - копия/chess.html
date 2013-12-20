@@ -1,0 +1,1412 @@
+<html>
+	<head>
+	<script src="http://ajax.googleapis.com/ajax/libs/jquery/1/jquery.min.js"></script>
+	<script src="http://localhost:81/socket.io/socket.io.js"></script>
+		<style type="text/css">
+		
+			.block1 { 
+				width: 100px;
+				height: 100px;
+				background-color: #808080;
+			   }
+			   
+			  .block2 { 
+				width: 100px;
+				height: 100px;
+			   }
+			
+			img{width:100px; height:100px;}
+			
+			td{border: 5px solid transparent;}
+			   
+			td.active{border: 5px solid blue;}
+			
+			td.move{background-color : yellow;}
+			
+			td.delete{border: 5px solid red;}
+			
+			td.rucker{border: 5px solid green;}
+			
+			td.passage{background-color: #f401d9;}
+			
+		</style> 	
+	
+		<script type="text/javascript">
+		
+		var choice;
+		//var flag = true;
+		
+		var matrix=new Array ( 
+		  new Array ('','','','','','','',''),
+		  new Array ('','','','','','','',''),
+		  new Array ('','','','','','','',''),
+		  new Array ('','','','','','','',''),
+		  new Array ('','','','','','','',''),
+		  new Array ('','','','','','','',''),
+		  new Array ('','','','','','','',''),
+		  new Array ('','','','','','','','')
+		);
+		
+		var backUp=new Array ( 
+		  new Array ('','','','','','','',''),
+		  new Array ('','','','','','','',''),
+		  new Array ('','','','','','','',''),
+		  new Array ('','','','','','','',''),
+		  new Array ('','','','','','','',''),
+		  new Array ('','','','','','','',''),
+		  new Array ('','','','','','','',''),
+		  new Array ('','','','','','','','')
+		);
+		
+		var f = true;
+		var connection;
+		var currStepChess;
+		var newfigure = undefined;
+			
+		
+		
+			function table() // функция создания доски
+			{
+				for (var i = 0; i<8; i ++)
+					for (var j = 0; j<8; j ++)
+						matrix[i][j] = 'empty';
+				
+				var n = document.getElementById('Text1').value;
+				var tbl = document.createElement("TABLE");
+				tbl.setAttribute("id","tbl");
+				
+				for (var i = 0; i < n; i++)
+				{
+					var newRow=tbl.insertRow(i);
+					for (var j = 0; j < n; j++)
+					{
+						if (i % 2 ==0) // если четная строка
+						{
+							if (j % 2 ==0)
+							{
+								var newCell = newRow.insertCell(j);
+								$(newCell).addClass('block2');
+								$(newCell).attr({'id': 'td_'+ i + '_' + j});
+							}
+							else
+							{
+								var newCell = newRow.insertCell(j);
+								$(newCell).addClass('block1');
+								$(newCell).attr({'id': 'td_'+ i + '_' + j});
+							}
+						}
+						else 
+						{
+							if (j % 2 !=0)
+							{
+								var newCell = newRow.insertCell(j);
+								$(newCell).addClass('block2');
+								
+								$(newCell).attr({'id': 'td_'+ i + '_' + j});
+							}
+							else
+							{
+								var newCell = newRow.insertCell(j);
+								$(newCell).addClass('block1');
+								$(newCell).attr({'id': 'td_'+ i + '_' + j});
+							}
+						}
+					}
+				}
+				document.body.appendChild(tbl);
+				shape();
+				
+				////////////////////////////////////////////////////////////////
+				connection = io.connect("http://localhost:81");
+				connection.on("makeMove", function (msg) {
+					console.log(msg);
+					if (f != currStepChess) {
+						onChessClick(msg.yfrom, msg.xfrom, msg.yto, msg.xto);
+						newfigure = msg.newfigure;
+						//onChessClick(msg.yto, msg.xto, msg.newfigure);
+					}
+				});
+
+
+				connection.on("gameStarted", function () {
+					if (currStepChess == undefined)
+					{
+						//f = false;
+						
+						currStepChess = false;
+						alert(currStepChess);
+					}
+					//paintChess();
+				});
+
+				connection.on("waitingForPlayers", function () {
+					//f = true;
+					//alert(f);
+					currStepChess = true;
+					alert(currStepChess);
+				});
+
+				connection.emit('readyToPlay');
+				
+				
+				
+				function onChessClick(yfrom, xfrom, xto, yto)
+				{
+					if (f != currStepChess)
+					{
+						var arrMatrix = matrix[xfrom][yfrom].split('_');
+						//var select; select[0] = xfrom; select[1] = xfrom; select[2] = yfrom;
+						var select = new Array (xfrom,xfrom,yfrom); 
+						
+						if (arrMatrix[1] == 'pawn')
+							pawn(select, arrMatrix);
+						if (arrMatrix[1] == 'rook' && arrMatrix[3] == 'no')
+							rook(select);
+						if (arrMatrix[1] == 'rook' && arrMatrix[3] == 'rucker')
+							rucker(select);
+						if (arrMatrix[1] == 'knight')
+							knight(select, arrMatrix);
+						if (arrMatrix[1] == 'bishop')
+							bishop(select);
+						if (arrMatrix[1] == 'queen')
+							queen(select);
+						if (arrMatrix[1] == 'king')
+							king(select, arrMatrix);
+							
+						select[1] = yto; select[2] = xto;
+						if (matrix[select[1]][select[2]] == 'passage')
+							movePassage(select);
+						else
+							move(select);
+						
+						f = currStepChess;
+						reboot();
+					}
+				}
+				
+				
+				/*function onChessClick(yfrom, xfrom, xto, yto)
+				{
+					if (f != currStepChess)
+					{
+						matrix[yto][xto] = matrix[xfrom][yfrom];
+						matrix[xfrom][yfrom] = 'empty';
+						f = currStepChess;
+						reboot();
+					}
+				}*/
+				
+				////////////////////////////////////////////////////////////////
+				
+				
+				$("#tbl").on('click','td', function()
+							{
+								
+								var select = this.id.split('_');
+								var arrMatrix = matrix[select[1]][select[2]].split('_');
+								if (matrix[select[1]][select[2]] != 'empty')
+								{
+									if (arrMatrix[3] == 'delete')
+										move(select);
+									else
+									{
+										if ((f == true && arrMatrix[0] == 'white' && currStepChess == f) || (f == false && arrMatrix[0] == 'black' && currStepChess == f))
+										{
+											if (arrMatrix[1] == 'pawn')
+												pawn(select, arrMatrix);
+											if (arrMatrix[1] == 'rook' && arrMatrix[3] == 'no')
+												rook(select);
+											if (arrMatrix[1] == 'rook' && arrMatrix[3] == 'rucker')
+												rucker(select);
+											if (arrMatrix[1] == 'knight')
+												knight(select, arrMatrix);
+											if (arrMatrix[1] == 'bishop')
+												bishop(select);
+											if (arrMatrix[1] == 'queen')
+												queen(select);
+											if (arrMatrix[1] == 'king')
+												king(select, arrMatrix);
+										}
+										if (matrix[select[1]][select[2]] == 'move')
+											move(select);
+										if (matrix[select[1]][select[2]] == 'passage')
+											movePassage(select);
+									}
+									mat();
+									reboot();
+								}
+							
+							});
+							
+				function mat()
+				{
+					for (var i = 0; i<8; i++)
+						for (var j = 0; j<8; j++)
+						{
+							var arr = matrix[i][j].split('_');
+							if (arr[1] == 'king' && arr[3] == 'delete')
+								alert('МАТ!!!');
+						}
+				}
+				
+				function shah(select)
+				{
+					backUpSave();
+					var arr = matrix[select[1]][select[2]].split('_');
+					if (arr[1] == 'pawn')
+						pawn(select, arr);
+					if (arr[1] == 'rook')
+						rook(select);
+					if (arr[1] == 'knight')
+						knight(select, arr);
+					if (arr[1] == 'bishop')
+						bishop(select);
+					if (arr[1] == 'queen')
+						queen(select);
+					if (arr[1] == 'king')
+						king(select, arr);
+					
+					for (var i = 0; i<8; i ++)
+						for (var j = 0; j<8; j ++)
+						{
+							var arr2 = matrix[i][j].split('_');
+							if (arr2[1] == 'king' && arr[0] != arr2[0] && arr2[3] == 'delete')
+							{
+								alert('ШАХ!!!');
+								select[1] = i; select[2] = j;
+								kingShah(select, arr2);
+							}
+						}	
+						
+					backUpOpen();
+				}
+				
+				function kingShah(select, arr2)
+				{
+					arr2[3] = 'active';
+					backUp[select[1]][select[2]] = arr2.join('_');
+					var i = select[1]; var j = select[2];
+					var arr;
+					i--; 
+					if ((i < 8) && (j < 8) && (i > -1) && (j > -1))
+					{
+						if (matrix[i][j] == 'empty')
+							backUp[i][j] = 'move';
+						else
+						{
+							arr = backUp[i][j].split('_');
+							if (arr2[0] != arr[0] && matrix[i][j] != 'move')
+							{
+								arr[3] = 'delete';
+								backUp[i][j] = arr.join('_');
+							}
+							//if (matrix[i][j] == 'move')
+								//backUp[i][j] = 'no';
+						}
+					}
+					j--;
+					if ((i < 8) && (j < 8) && (i > -1) && (j > -1))
+					{
+						if (matrix[i][j] == 'empty')
+							backUp[i][j] = 'move';
+						else
+						{
+							arr = backUp[i][j].split('_');
+							if (arr2[0] != arr[0] && matrix[i][j] != 'move')
+							{
+								arr[3] = 'delete';
+								backUp[i][j] = arr.join('_');
+							}
+							//if (matrix[i][j] == 'move')
+								//backUp[i][j] = 'no';
+						}
+					}
+					j++; j++;
+					if ((i < 8) && (j < 8) && (i > -1) && (j > -1))
+					{
+						if (matrix[i][j] == 'empty')
+							backUp[i][j] = 'move';
+						else
+						{
+							arr = backUp[i][j].split('_');
+							if (arr2[0] != arr[0] && matrix[i][j] != 'move')
+							{
+								arr[3] = 'delete';
+								backUp[i][j] = arr.join('_');
+							}
+							//if (matrix[i][j] == 'move')
+								//backUp[i][j] = 'no';
+						}
+					}
+					i++;
+					if ((i < 8) && (j < 8) && (i > -1) && (j > -1))
+					{
+						if (matrix[i][j] == 'empty')
+							backUp[i][j] = 'move';
+						else
+						{
+							arr = backUp[i][j].split('_');
+							if (arr2[0] != arr[0] && matrix[i][j] != 'move')
+							{
+								arr[3] = 'delete';
+								backUp[i][j] = arr.join('_');
+							}
+							//if (matrix[i][j] == 'move')
+								//backUp[i][j] = 'no';
+						}
+					}
+					j--; j--;
+					if ((i < 8) && (j < 8) && (i > -1) && (j > -1))
+					{
+						if (matrix[i][j] == 'empty')
+							backUp[i][j] = 'move';
+						else
+						{
+							arr = backUp[i][j].split('_');
+							if (arr2[0] != arr[0] && matrix[i][j] != 'move')
+							{
+								arr[3] = 'delete';
+								backUp[i][j] = arr.join('_');
+							}
+							//if (matrix[i][j] == 'move')
+								//backUp[i][j] = 'no';
+						}
+					}
+					i++;
+					if ((i < 8) && (j < 8) && (i > -1) && (j > -1))
+					{
+						if (matrix[i][j] == 'empty')
+							backUp[i][j] = 'move';
+						else
+						{
+							arr = backUp[i][j].split('_');
+							if (arr2[0] != arr[0] && matrix[i][j] != 'move')
+							{
+								arr[3] = 'delete';
+								backUp[i][j] = arr.join('_');
+							}
+							//if (matrix[i][j] == 'move')
+								//backUp[i][j] = 'no';
+						}
+					}
+					j++;
+					if ((i < 8) && (j < 8) && (i > -1) && (j > -1))
+					{
+						if (matrix[i][j] == 'empty')
+							backUp[i][j] = 'move';
+						else
+						{
+							arr = backUp[i][j].split('_');
+							if (arr2[0] != arr[0] && matrix[i][j] != 'move')
+							{
+								arr[3] = 'delete';
+								backUp[i][j] = arr.join('_');
+							}
+							//if (matrix[i][j] == 'move')
+								//backUp[i][j] = 'no';
+						}
+					}
+					j++;
+					if ((i < 8) && (j < 8) && (i > -1) && (j > -1))
+					{
+						if (matrix[i][j] == 'empty')
+							backUp[i][j] = 'move';
+						else
+						{
+							arr = backUp[i][j].split('_');
+							if (arr2[0] != arr[0] && matrix[i][j] != 'move')
+							{
+								arr[3] = 'delete';
+								backUp[i][j] = arr.join('_');
+							}
+							//if (matrix[i][j] == 'move')
+								//backUp[i][j] = 'no';
+						}
+					}
+				}
+				
+				function backUpSave()
+				{
+					for (var i = 0; i<8; i ++)
+						for (var j = 0; j<8; j ++)
+							backUp[i][j] = matrix[i][j];
+				}
+				
+				function backUpOpen()
+				{
+					for (var i = 0; i<8; i ++)
+						for (var j = 0; j<8; j ++)
+							matrix[i][j] = backUp[i][j];
+				}
+							
+				function rucker(select)
+				{
+					if (select[2] == 0)
+					{
+						matrix[select[1]][3] =  matrix[select[1]][select[2]];
+						matrix[select[1]][select[2]] = 'empty';
+						matrix[select[1]][2] = matrix[select[1]][4];
+						matrix[select[1]][4] = 'empty';
+					}
+					else
+					{
+						matrix[select[1]][5] =  matrix[select[1]][select[2]];
+						matrix[select[1]][select[2]] = 'empty';
+						matrix[select[1]][6] = matrix[select[1]][4];
+						matrix[select[1]][4] = 'empty';
+					}
+					clean();
+					if (f)
+						f = false;
+					else
+						f = true;
+				}
+							
+				
+
+				function clean()
+				{
+					for (var i = 0; i<8; i ++)
+						for (var j = 0; j<8; j ++)
+						{
+							var arr = matrix[i][j].split('_');
+							
+							if (matrix[i][j] == 'move')
+								matrix[i][j] = 'empty';
+							if (matrix[i][j] == 'passage')
+								matrix[i][j] = 'empty';
+							
+								
+							
+							if (arr[3] == 'active')
+							{
+								arr[3] = 'no';
+								matrix[i][j] = arr.join('_');
+							}
+							
+							if (arr[3] == 'delete')
+							{
+								arr[3] = 'no';
+								matrix[i][j] = arr.join('_');
+							}
+							
+							if (arr[3] == 'rucker')
+							{
+								arr[3] = 'no';
+								matrix[i][j] = arr.join('_');
+							}
+							
+							if (arr[3] == 'passage')
+							{
+								arr[3] = 'no';
+								matrix[i][j] = arr.join('_');
+							}
+								
+						}
+							
+					$('.block1').removeClass('move');
+					$('.block2').removeClass('move');
+					$('.block1').removeClass('active');
+					$('.block2').removeClass('active');
+					$('.block1').removeClass('delete');
+					$('.block2').removeClass('delete');
+					$('.block1').removeClass('rucker');
+					$('.block2').removeClass('rucker');
+					$('.block1').removeClass('passage');
+					$('.block2').removeClass('passage');
+				}
+				
+				function movePassage(select)
+				{
+					for (var i = 0; i<8; i++)
+						for (var j = 0; j<8; j++)
+						{
+							var arr = matrix[i][j].split('_');
+							if (arr[3] == 'active')
+							{
+								if (f == currStepChess)//<<========================================================================================
+									connection.emit('makeMove', {xfrom:i, yfrom:j, xto:select[1], yto:select[2]});
+								arr[3] = 'no';
+								matrix[select[1]][select[2]] = arr.join('_');
+								matrix[i][j] = 'empty';
+							}
+							if (arr[3] == 'passage')
+								matrix[i][j] = 'empty';
+						}
+					if (f == true)
+						f = false;
+					else
+						f = true;
+					clean();
+					shah(select);
+					
+				}
+				
+				function qwerty()
+				{	
+					for (var i = 0; i<8; i++)
+						for (var j = 0; j<8; j++)
+						{
+							var arr = matrix[i][j].split('_');
+							if (arr[2] == 'two')
+							{
+								arr[2] = 'no';
+								matrix[i][j] = arr.join('_');
+								//alert(i);
+								//alert(j);
+							}
+						}
+				}
+				
+				function move(select)
+				{
+					qwerty();
+					for (var i = 0; i<8; i++)
+						for (var j = 0; j<8; j++)
+						{
+							var arr = matrix[i][j].split('_');
+				
+							if (arr[3] == 'active')
+							{
+								if (arr[2] == 'one')
+								{
+									arr[2] = 'no';
+									if ((select[1] == 3 && i == 1)||(select[1] == 4 && i == 6))
+										arr[2] = 'two';
+								}
+								
+								arr[3] = 'no';
+								matrix[select[1]][select[2]] = arr.join('_');
+								matrix[i][j] = 'empty';
+								
+								if (arr[1] == 'pawn')
+								{
+									if (select[1] == 0 && arr[0] == 'white')//замена фигуры
+									{
+										if (f != currStepChess && newfigure != undefined)
+										{
+											arr[1] = newfigure;
+											newfigure = undefined;
+										}
+										else
+										{
+											arr[1] = 'queen';
+											if (f == currStepChess)//<<========================================================================================
+												connection.emit('makeMove', {xfrom:i, yfrom:j, xto:select[1], yto:select[2], newfigure:'queen'});
+										}
+										matrix[select[1]][select[2]] = arr.join('_');
+									}
+									if (select[1] == 7 && arr[0] == 'black')
+									{
+										if (f != currStepChess && newfigure != undefined)
+										{
+											arr[1] = newfigure;
+											newfigure = undefined;
+										}
+										else
+										{
+											arr[1] = 'queen';
+											if (f == currStepChess)//<<========================================================================================
+												connection.emit('makeMove', {xfrom:i, yfrom:j, xto:select[1], yto:select[2], newfigure:'queen'});
+										}
+										matrix[select[1]][select[2]] = arr.join('_');
+										//replace('black', select);
+									}
+									if (f == currStepChess)//<<========================================================================================
+										connection.emit('makeMove', {xfrom:i, yfrom:j, xto:select[1], yto:select[2]});
+								}
+								else
+								{
+									if (f == currStepChess)//<<========================================================================================
+										connection.emit('makeMove', {xfrom:i, yfrom:j, xto:select[1], yto:select[2]});
+								}
+							}
+						}
+					if (f == true)
+						f = false;
+					else
+						f = true;
+					clean();
+					shah(select);
+				}
+				
+				/*function replace(str, select)
+				{
+					
+				}*/
+				
+				function passage(select, arrMatrix)
+				{
+					var i = select[1];
+					var j = select[2];
+					if (arrMatrix[0] == 'white' && i == 3)
+					{
+						if (j > 0)
+						{
+							j--; i--;
+							if (matrix[select[1]][j] == 'black_pawn_two_no' && matrix[i][j] == 'empty')
+							{
+								matrix[select[1]][j] = 'black_pawn_no_passage';
+								matrix[i][j] = 'passage';
+							}
+							j++; i++;
+						}
+						if (j < 7)
+						{
+							j++; i--;
+							if (matrix[select[1]][j] == 'black_pawn_two_no' && matrix[i][j] == 'empty')
+							{
+								matrix[select[1]][j] = 'black_pawn_no_passage';
+								matrix[i][j] = 'passage';
+							}
+							j--; i++;
+						}
+					}
+					if (arrMatrix[0] == 'black' && i == 4)
+					{
+						if (j > 0)
+						{
+							j--; i++;
+							if (matrix[select[1]][j] == 'white_pawn_two_no' && matrix[i][j] == 'empty')
+							{
+								matrix[select[1]][j] = 'white_pawn_no_passage';
+								matrix[i][j] = 'passage';
+							}
+							j++; i--;
+						}
+						if (j < 7)
+						{
+							j++; i++
+							if (matrix[select[1]][j] == 'white_pawn_two_no' && matrix[i][j] == 'empty')
+							{
+								matrix[select[1]][j] = 'white_pawn_no_passage';
+								matrix[i][j] = 'passage';
+							}
+							j--;i--;
+						}
+					}
+					
+				}
+					
+				function pawn(select, arrMatrix)
+				{
+					clean();
+					arrMatrix[3] = 'active';
+					matrix[select[1]][select[2]] = arrMatrix.join('_');
+					
+					var i = select[1];
+					var j = select[2];
+					var arr;
+					
+					if (arrMatrix[0] == 'white')
+					{	
+						if (i > 0)
+						{
+							i--;
+							if (matrix[i][j] == 'empty')
+							{
+								matrix[i][j] = 'move';
+								if (i > 0)
+								{
+									i--;
+									if (matrix[i][j] == 'empty')
+										if (arrMatrix[2] == 'one')
+											matrix[i][j] = 'move';
+									i++;
+								}
+							}
+							i++;
+						}
+						if (j < 7 &&  i > 0)
+						{
+							j++; i--;
+							arr = matrix[i][j].split('_');
+							if (arr[0] == 'black')
+							{
+								arr = matrix[i][j].split('_');
+								arr[3] = 'delete';
+								matrix[i][j] = arr.join('_'); 
+							}
+							j--; i++;
+						}
+						if (j > 0 &&  i > 0)
+						{
+							j--; i--;
+							arr = matrix[i][j].split('_');
+							if (arr[0] == 'black')
+							{
+								arr = matrix[i][j].split('_');
+								arr[3] = 'delete';
+								matrix[i][j] = arr.join('_'); 
+							}
+							j++; i++;
+						}
+					}
+					else
+					{
+						if (i < 7)
+						{
+							i++;
+							if (matrix[i][j] == 'empty')
+							{
+								matrix[i][j] = 'move';
+								if (i < 8)
+								{
+									i++;
+									if (matrix[i][j] == 'empty')
+										if (arrMatrix[2] == 'one')
+											matrix[i][j] = 'move';
+									i--;
+								}
+							}
+							i--;
+						}
+						if (j < 7 && i < 7)
+						{
+							j++; i++;
+							arr = matrix[i][j].split('_');
+							if (arr[0] == 'white')
+							{
+								arr = matrix[i][j].split('_');
+								arr[3] = 'delete';
+								matrix[i][j] = arr.join('_'); 
+							}
+							j--; i--;
+						}
+						if (j > 0 && i < 7)
+						{
+							j--; i++;
+							arr = matrix[i][j].split('_');
+							if (arr[0] == 'white')
+							{
+								arr = matrix[i][j].split('_');
+								arr[3] = 'delete';
+								matrix[i][j] = arr.join('_'); 
+							}
+							j++; i--;
+						}
+					}
+					passage(select, arrMatrix);
+				}
+				
+				function rook(select)
+				{
+					clean();
+					var arr = matrix[select[1]][select[2]].split('_');
+					arr[3] = 'active';
+					matrix[select[1]][select[2]] = arr.join('_');
+					direct(select[1], select[2]);	
+				}
+				
+				function knight(select, arrMatrix)
+				{
+					clean();
+					arrMatrix[3] = 'active';
+					matrix[select[1]][select[2]] = arrMatrix.join('_');
+					var i = select[1]; var j = select[2];
+					i ++; i ++; j--;
+					var arr;
+					if ((i < 8) && (j < 8) && (i > -1) && (j > -1))
+					{
+						if (matrix[i][j] == 'empty')
+							matrix[i][j] = 'move';
+						else
+						{
+							arr = matrix[i][j].split('_');
+							if (arrMatrix[0] != arr[0])
+							{
+								arr[3] = 'delete';
+								matrix[i][j] = arr.join('_');
+							}
+						}
+					}
+					i--; j--;
+					if ((i < 8) && (j < 8) && (i > -1) && (j > -1))
+					{
+						if (matrix[i][j] == 'empty')
+							matrix[i][j] = 'move';
+						else
+						{
+							arr = matrix[i][j].split('_');
+							if (arrMatrix[0] != arr[0])
+							{
+								arr[3] = 'delete';
+								matrix[i][j] = arr.join('_');
+							}
+						}
+					}
+					i--; i--;
+					if ((i < 8) && (j < 8) && (i > -1) && (j > -1))
+					{
+						if (matrix[i][j] == 'empty')
+							matrix[i][j] = 'move';
+						else
+						{
+							arr = matrix[i][j].split('_');
+							if (arrMatrix[0] != arr[0])
+							{
+								arr[3] = 'delete';
+								matrix[i][j] = arr.join('_');
+							}
+						}
+					}
+					i--; j++;
+					if ((i < 8) && (j < 8) && (i > -1) && (j > -1))
+					{
+						if (matrix[i][j] == 'empty')
+							matrix[i][j] = 'move';
+						else
+						{
+							arr = matrix[i][j].split('_');
+							if (arrMatrix[0] != arr[0])
+							{
+								arr[3] = 'delete';
+								matrix[i][j] = arr.join('_');
+							}
+						}
+					}
+					j++; j++;
+					if ((i < 8) && (j < 8) && (i > -1) && (j > -1))
+					{
+						if (matrix[i][j] == 'empty')
+							matrix[i][j] = 'move';
+						else
+						{
+							arr = matrix[i][j].split('_');
+							if (arrMatrix[0] != arr[0])
+							{
+								arr[3] = 'delete';
+								matrix[i][j] = arr.join('_');
+							}
+						}
+					}
+					j++; i++;
+					if ((i < 8) && (j < 8) && (i > -1) && (j > -1))
+					{
+						if (matrix[i][j] == 'empty')
+							matrix[i][j] = 'move';
+						else
+						{
+							arr = matrix[i][j].split('_');
+							if (arrMatrix[0] != arr[0])
+							{
+								arr[3] = 'delete';
+								matrix[i][j] = arr.join('_');
+							}
+						}
+					}
+					i++; i++;
+					if ((i < 8) && (j < 8) && (i > -1) && (j > -1))
+					{
+						if (matrix[i][j] == 'empty')
+							matrix[i][j] = 'move';
+						else
+						{
+							arr = matrix[i][j].split('_');
+							if (arrMatrix[0] != arr[0])
+							{
+								arr[3] = 'delete';
+								matrix[i][j] = arr.join('_');
+							}
+						}
+					}
+					i++; j--;
+					if ((i < 8) && (j < 8) && (i > -1) && (j > -1))
+					{
+						if (matrix[i][j] == 'empty')
+							matrix[i][j] = 'move';
+						else
+						{
+							arr = matrix[i][j].split('_');
+							if (arrMatrix[0] != arr[0])
+							{
+								arr[3] = 'delete';
+								matrix[i][j] = arr.join('_');
+							}
+						}
+					}
+				}
+				
+				function bishop(select)
+				{
+					clean();
+					var arr = matrix[select[1]][select[2]].split('_');
+					arr[3] = 'active';
+					matrix[select[1]][select[2]] = arr.join('_');
+					diagonal(select[1], select[2]);
+				}
+				
+				function queen(select)
+				{
+					clean();
+					var arr = matrix[select[1]][select[2]].split('_');
+					arr[3] = 'active';
+					matrix[select[1]][select[2]] = arr.join('_');
+					diagonal(select[1], select[2]);
+					direct(select[1], select[2]);
+				}
+				
+				function king(select, arrMatrix)
+				{
+					
+					clean();
+					arrMatrix[3] = 'active';
+					castling(arrMatrix[0]);
+					matrix[select[1]][select[2]] = arrMatrix.join('_');
+					var i = select[1]; var j = select[2];
+					var arr;
+					i--; 
+					if ((i < 8) && (j < 8) && (i > -1) && (j > -1))
+					{
+						if (matrix[i][j] == 'empty')
+							matrix[i][j] = 'move';
+						else
+						{
+							arr = matrix[i][j].split('_');
+							if (arrMatrix[0] != arr[0])
+							{
+								arr[3] = 'delete';
+								matrix[i][j] = arr.join('_');
+							}
+						}
+					}
+					j--;
+					if ((i < 8) && (j < 8) && (i > -1) && (j > -1))
+					{
+						if (matrix[i][j] == 'empty')
+							matrix[i][j] = 'move';
+						else
+						{
+							arr = matrix[i][j].split('_');
+							if (arrMatrix[0] != arr[0])
+							{
+								arr[3] = 'delete';
+								matrix[i][j] = arr.join('_');
+							}
+						}
+					}
+					j++; j++;
+					if ((i < 8) && (j < 8) && (i > -1) && (j > -1))
+					{
+						if (matrix[i][j] == 'empty')
+							matrix[i][j] = 'move';
+						else
+						{
+							arr = matrix[i][j].split('_');
+							if (arrMatrix[0] != arr[0])
+							{
+								arr[3] = 'delete';
+								matrix[i][j] = arr.join('_');
+							}
+						}
+					}
+					i++;
+					if ((i < 8) && (j < 8) && (i > -1) && (j > -1))
+					{
+						if (matrix[i][j] == 'empty')
+							matrix[i][j] = 'move';
+						else
+						{
+							arr = matrix[i][j].split('_');
+							if (arrMatrix[0] != arr[0])
+							{
+								arr[3] = 'delete';
+								matrix[i][j] = arr.join('_');
+							}
+						}
+					}
+					j--; j--;
+					if ((i < 8) && (j < 8) && (i > -1) && (j > -1))
+					{
+						if (matrix[i][j] == 'empty')
+							matrix[i][j] = 'move';
+						else
+						{
+							arr = matrix[i][j].split('_');
+							if (arrMatrix[0] != arr[0])
+							{
+								arr[3] = 'delete';
+								matrix[i][j] = arr.join('_');
+							}
+						}
+					}
+					i++;
+					if ((i < 8) && (j < 8) && (i > -1) && (j > -1))
+					{
+						if (matrix[i][j] == 'empty')
+							matrix[i][j] = 'move';	
+						else
+						{
+							arr = matrix[i][j].split('_');
+							if (arrMatrix[0] != arr[0])
+							{
+								arr[3] = 'delete';
+								matrix[i][j] = arr.join('_');
+							}
+						}
+					}
+					j++;
+					if ((i < 8) && (j < 8) && (i > -1) && (j > -1))
+					{
+						if (matrix[i][j] == 'empty')
+							matrix[i][j] = 'move';
+						else
+						{
+							arr = matrix[i][j].split('_');
+							if (arrMatrix[0] != arr[0])
+							{
+								arr[3] = 'delete';
+								matrix[i][j] = arr.join('_');
+							}
+						}
+					}
+					j++;
+					if ((i < 8) && (j < 8) && (i > -1) && (j > -1))
+					{
+						if (matrix[i][j] == 'empty')
+							matrix[i][j] = 'move';
+						else
+						{
+							arr = matrix[i][j].split('_');
+							if (arrMatrix[0] != arr[0])
+							{
+								arr[3] = 'delete';
+								matrix[i][j] = arr.join('_');
+							}
+						}
+					}
+					//castling(arrMatrix[0]);
+				}
+				
+				function castling(str) //выделение рокировки
+				{
+					var flag = true;
+					var i;
+					if (str == 'white')
+						i = 7;
+					else
+						i = 0;
+						
+					var arr = matrix[i][4].split('_');
+					if (arr[2] == 'one')
+					{
+						arr = matrix[i][0].split('_');
+						if (arr[2] == 'one')
+						{
+							for (var j = 1; j < 4; j++)
+							if (matrix[i][j] != 'empty')
+								flag = false;
+							if (flag)
+							{
+								arr[3] = 'rucker';
+								matrix[i][0] = arr.join('_');
+							}	
+						}
+						flag = true;
+						arr = matrix[i][7].split('_');
+						if (arr[2] == 'one')
+						{
+							for (var j = 5; j < 7; j++)
+							if (matrix[i][j] != 'empty')
+								flag = false;
+							if (flag)
+							{
+								arr[3] = 'rucker';
+								matrix[i][7] = arr.join('_');
+							}	
+						}
+					}
+				}
+				
+				function diagonal(positionI, positionJ)//======================= функции хода
+				{
+					var i = positionI;
+					var j = positionJ;
+					var flag = true;
+					var arr1 = matrix[positionI][positionJ].split('_');
+					var arr2;
+					
+					while(flag == true)
+					{
+						i++; j++;
+						if ((i < 8) && (j < 8))
+						{
+							if (matrix[i][j] == 'empty')
+								matrix[i][j] = 'move';
+							else
+							{
+								flag = false;
+								arr2 = matrix[i][j].split('_');
+								if (arr1[0] != arr2[0])
+								{
+									arr2[3] = 'delete';
+									matrix[i][j] = arr2.join('_');
+								}
+							}
+						}
+						else
+							flag = false;
+					}
+					
+					i = positionI;
+					j = positionJ;
+					flag = true;
+					while(flag == true)
+					{
+						i++; j--;
+						if ((i < 8) && (j > -1))
+						{
+							if (matrix[i][j] == 'empty')
+								matrix[i][j] = 'move';
+							else
+							{
+								flag = false;
+								arr2 = matrix[i][j].split('_');
+								if (arr1[0] != arr2[0])
+								{
+									arr2[3] = 'delete';
+									matrix[i][j] = arr2.join('_');
+								}
+							}
+						}
+						else
+							flag = false;
+					}
+					
+					i = positionI;
+					j = positionJ;
+					flag = true;
+					while(flag == true)
+					{
+						i--; j--;
+						if ((i > -1) && (j > -1))
+						{
+							if (matrix[i][j] == 'empty')
+								matrix[i][j] = 'move';
+							else
+							{
+								flag = false;
+								arr2 = matrix[i][j].split('_');
+								if (arr1[0] != arr2[0])
+								{
+									arr2[3] = 'delete';
+									matrix[i][j] = arr2.join('_');
+								}
+							}
+						}
+						else
+							flag = false;
+					}
+					
+					i = positionI;
+					j = positionJ;
+					flag = true;
+					while(flag == true)
+					{
+						i--; j++;
+						if ((i > -1) && (j < 8))
+						{
+							if (matrix[i][j] == 'empty')
+								matrix[i][j] = 'move';
+							else
+							{
+								flag = false;
+								arr2 = matrix[i][j].split('_');
+								if (arr1[0] != arr2[0])
+								{
+									arr2[3] = 'delete';
+									matrix[i][j] = arr2.join('_');
+								}
+							}
+						}
+						else
+							flag = false;
+					}
+				}
+				
+				function direct(positionI, positionJ) 
+				{
+					var i = positionI;
+					var j = positionJ;
+					var flag = true;
+					var arr1 = matrix[positionI][positionJ].split('_');
+					var arr2;
+					
+					while(flag == true) 
+					{	
+						i++;
+						if (i<8)
+						{
+							if (matrix[i][j] == 'empty')
+								matrix[i][j] = 'move';
+							else
+							{
+								flag = false;
+								arr2 = matrix[i][j].split('_');
+								if (arr1[0] != arr2[0])
+								{
+									arr2[3] = 'delete';
+									matrix[i][j] = arr2.join('_');
+								}
+							}
+						}
+						else
+							flag = false;
+					}
+					
+					i = positionI;
+					flag = true;
+					while(flag == true)
+					{
+						i--;
+						if (i > -1)
+						{
+							if (matrix[i][j] == 'empty')
+								matrix[i][j] = 'move';
+							else
+							{
+								flag = false;
+								arr2 = matrix[i][j].split('_');
+								if (arr1[0] != arr2[0])
+								{
+									arr2[3] = 'delete';
+									matrix[i][j] = arr2.join('_');
+								}
+							}
+						}
+						else
+							flag = false;
+					}
+					
+					i = positionI;
+					flag = true;
+					while(flag == true)
+					{
+						j--;
+						if (j > -1)
+						{
+							if (matrix[i][j] == 'empty')
+								matrix[i][j] = 'move';
+							else
+							{
+								flag = false;
+								arr2 = matrix[i][j].split('_');
+								if (arr1[0] != arr2[0])
+								{
+									arr2[3] = 'delete';
+									matrix[i][j] = arr2.join('_');
+								}
+							}
+						}
+						else
+							flag = false;
+					}
+					
+					j = positionJ;
+					flag = true;
+					while(flag == true)
+					{
+						j++;
+						if (j < 8)
+						{
+							if (matrix[i][j] == 'empty')
+								matrix[i][j] = 'move'
+							else
+							{
+								flag = false;
+								arr2 = matrix[i][j].split('_');
+								if (arr1[0] != arr2[0])
+								{
+									arr2[3] = 'delete';
+									matrix[i][j] = arr2.join('_');
+								}
+							}
+						}
+						else
+							flag = false;
+					}
+				}
+				
+			}
+			
+			
+			function reboot()
+			{
+				for (var i = 0; i<8; i ++)
+					for (var j = 0; j<8; j ++)
+						$('#td_' + i + '_' + j).empty();
+						
+				var image1 = "<img src='";
+				var image2 = ".png'>"
+				for (var i = 0; i<8; i ++)
+					for (var j = 0; j<8; j ++)
+					if (matrix[i][j] != 'empty')
+					{
+						if (matrix[i][j] != 'move' && matrix[i][j] != 'passage')
+						{
+							var arr = matrix[i][j].split('_');
+							$('#td_' + i + '_' + j).append(image1 + arr[1] + '_' + arr[0] + image2);
+							if (arr[3] == 'active')
+								$('#td_' + i + '_' + j).addClass('active');
+							if (arr[3] == 'delete')
+								$('#td_' + i + '_' + j).addClass('delete');
+							if (arr[3] == 'rucker')
+								$('#td_' + i + '_' + j).addClass('rucker');
+							
+						}
+						if (matrix[i][j] == 'move')
+							$('#td_' + i + '_' + j).addClass('move');
+						if (matrix[i][j] == 'passage')
+							$('#td_' + i + '_' + j).addClass('passage');
+					}
+				
+				
+				//alert(matrix);
+			}
+			
+			function shape() 
+			{
+				for (var j = 0; j<8; j ++)
+				{
+					matrix[1][j] = 'black_pawn_one_no';
+					
+					matrix[6][j] = 'white_pawn_one_no';
+				}
+				//черные ладьи
+				matrix[0][0] = 'black_rook_one_no';
+				matrix[0][7] = 'black_rook_one_no';
+				//белые ладьи
+				matrix[7][7] = 'white_rook_one_no';
+				matrix[7][0] = 'white_rook_one_no';
+				//черные кони 
+				matrix[0][1] = 'black_knight_no_no';
+				matrix[0][6] = 'black_knight_no_no';
+				//белые кони
+				matrix[7][1] = 'white_knight_no_no';
+				matrix[7][6] = 'white_knight_no_no';
+				// черные слоны
+				matrix[0][2] = 'black_bishop_no_no';
+				matrix[0][5] = 'black_bishop_no_no';
+				// белые слоны
+				matrix[7][2] = 'white_bishop_no_no';
+				matrix[7][5] = 'white_bishop_no_no';
+				//черный ферзь и король
+				matrix[0][3] = 'black_queen_no_no';
+				matrix[0][4] = 'black_king_one_no';
+				//белый ферзь и король
+				matrix[7][3] = 'white_queen_no_no';
+				matrix[7][4] = 'white_king_one_no';
+		
+				reboot();
+			}
+			
+			
+			
+		
+		</script>
+	</head>
+	<body>
+		<input type="text" id="Text1" value = 8 />
+		<input type="button" id="Button1" style="width: auto; margin: 0px 3px 0px 3px" value="qwerty" onclick="table()" />
+	</body>
+</html>
